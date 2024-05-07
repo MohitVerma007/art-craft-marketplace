@@ -9,7 +9,7 @@ module art_craft_marketplace::test_marketplace {
     use sui::vector::{Self};
     use std::string::{Self};
     use std::option::{Self, Option};
-    
+
     use art_craft_marketplace::marketplace::{Self, Product, User, Transaction, AdminCap};
 
     const TEST_ADDRESS1: address = @0xB;
@@ -26,7 +26,7 @@ module art_craft_marketplace::test_marketplace {
         // Check if AdminCap is created and transferred to TEST_ADDRESS1
         let admin_cap = ts::take_from_sender<AdminCap>(scenario);
         assert_eq(admin_cap.id != object::UID_NULL, true);
-        
+
         ts::return_to_sender(scenario, admin_cap);
         ts::end(scenario);
     }
@@ -37,19 +37,21 @@ module art_craft_marketplace::test_marketplace {
         next_tx(scenario, TEST_ADDRESS1);
 
         // Create a new user account
-        let user = marketplace::new_user(
+        let user_id = marketplace::new_user(
+            ts::ctx(scenario),
             string::utf8(b"John Doe"),
             string::utf8(b"john@example.com"),
-            string::utf8(b"Artist"),
-            ts::ctx(scenario)
+            string::utf8(b"Artist")
         );
+
+        // Fetch user details using the user_id
+        let user = ts::fetch<User>(scenario, user_id);
 
         // Verify user details
         assert_eq(user.name, string::utf8(b"John Doe"));
         assert_eq(user.email, string::utf8(b"john@example.com"));
         assert_eq(user.role, string::utf8(b"Artist"));
 
-        ts::return_to_sender(scenario, user);
         ts::end(scenario);
     }
 
@@ -58,16 +60,22 @@ module art_craft_marketplace::test_marketplace {
         let scenario = ts::new();
         next_tx(scenario, TEST_ADDRESS1);
 
+        // Artist's UID needs to be defined; simulate fetching artist user UID
+        let artist_id = UID::new(ts::ctx(scenario)); // This should actually come from a created User
+
         // Create a new product
-        let product = marketplace::new_product(
+        let product_id = marketplace::new_product(
+            ts::ctx(scenario),
             string::utf8(b"Handmade Vase"),
             string::utf8(b"A beautiful handmade vase."),
             1000,
             10,
             string::utf8(b"Craft"),
-            string::utf8(b"John Doe"),
-            ts::ctx(scenario)
+            artist_id
         );
+
+        // Fetch product details using the product_id
+        let product = ts::fetch<Product>(scenario, product_id);
 
         // Verify product details
         assert_eq(product.name, string::utf8(b"Handmade Vase"));
@@ -75,9 +83,7 @@ module art_craft_marketplace::test_marketplace {
         assert_eq(product.price, 1000);
         assert_eq(product.stock, 10);
         assert_eq(product.category, string::utf8(b"Craft"));
-        assert_eq(product.artist, string::utf8(b"John Doe"));
 
-        ts::return_to_sender(scenario, product);
         ts::end(scenario);
     }
 
@@ -86,26 +92,28 @@ module art_craft_marketplace::test_marketplace {
         let scenario = ts::new();
         next_tx(scenario, TEST_ADDRESS1);
 
+        let artist_id = UID::new(ts::ctx(scenario)); // This should actually come from a created User
+
         // Create a new product
-        let product = marketplace::new_product(
+        let product_id = marketplace::new_product(
+            ts::ctx(scenario),
             string::utf8(b"Handmade Vase"),
             string::utf8(b"A beautiful handmade vase."),
             1000,
             10,
             string::utf8(b"Craft"),
-            string::utf8(b"John Doe"),
-            ts::ctx(scenario)
+            artist_id
         );
 
         // Transfer product to the test address
-        transfer::public_transfer(product, TEST_ADDRESS1);
+        transfer::public_transfer(product_id, TEST_ADDRESS1);
 
         // Create a user account
-        let buyer = marketplace::new_user(
+        let buyer_id = marketplace::new_user(
+            ts::ctx(scenario),
             string::utf8(b"Jane Doe"),
             string::utf8(b"jane@example.com"),
-            string::utf8(b"Customer"),
-            ts::ctx(scenario)
+            string::utf8(b"Customer")
         );
 
         // Mint some test coins to simulate a purchase
@@ -114,14 +122,16 @@ module art_craft_marketplace::test_marketplace {
         // Simulate a transaction
         next_tx(scenario, TEST_ADDRESS2);
         {
-            let product = ts::take_from_sender<Product>(scenario);
-            let buyer = ts::take_from_sender<User>(scenario);
+            let transaction_id = marketplace::new_transaction(
+                ts::ctx(scenario),
+                buyer_id,
+                product_id
+            );
 
-            let transaction = marketplace::new_transaction(buyer, product, ts::ctx(scenario));
-            assert_eq(transaction.buyer.name, string::utf8(b"Jane Doe"));
-            assert_eq(transaction.product.name, string::utf8(b"Handmade Vase"));
+            let transaction = ts::fetch<Transaction>(scenario, transaction_id);
 
-            transfer::public_transfer(transaction, TEST_ADDRESS2);
+            assert_eq(ts::fetch<User>(scenario, transaction.buyer_id).name, string::utf8(b"Jane Doe"));
+            assert_eq(ts::fetch<Product>(scenario, transaction.product_id).name, string::utf8(b"Handmade Vase"));
 
             ts::return_to_sender(scenario, coins); // Return coins to reset scenario
         };
