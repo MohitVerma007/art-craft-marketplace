@@ -7,8 +7,8 @@ module ArtCraft::game {
     use sui::transfer_policy::{Self as tp};
     use sui::package::{Self, Publisher};
 
-    // Picture struct representing an NFT
-    struct Product has key {
+    // product struct representing an NFT
+    struct Product has key, store {
         id: UID,
         name: String,
         description: String,
@@ -19,7 +19,7 @@ module ArtCraft::game {
     }
     
     /// Publisher capability object
-    struct PicturePublisher has key { id: UID, publisher: Publisher }
+    struct ProductPublisher has key { id: UID, publisher: Publisher }
 
      // one time witness 
     struct GAME has drop {}
@@ -34,7 +34,7 @@ module ArtCraft::game {
         // define the publisher
         let publisher_ = package::claim<GAME>(otw, ctx);
         // wrap the publisher and share.
-        transfer::share_object(PicturePublisher {
+        transfer::share_object(ProductPublisher {
             id: object::new(ctx),
             publisher: publisher_
         });
@@ -50,7 +50,7 @@ module ArtCraft::game {
         kiosk_cap
     }
     // create any transferpolicy for rules 
-    public fun new_policy(publish: &PicturePublisher, ctx: &mut TxContext ) {
+    public fun new_policy(publish: &ProductPublisher, ctx: &mut TxContext ) {
         // set the publisher
         let publisher = get_publisher(publish);
         // create an transfer_policy and tp_cap
@@ -59,11 +59,11 @@ module ArtCraft::game {
         transfer::public_transfer(tp_cap, tx_context::sender(ctx));
         transfer::public_share_object(transfer_policy);
     }
-    // Function to create a new Picture NFT
-    public fun new_product(uri: String, name: String, description: String, price: u64, stock: u64, category: String, ctx: &mut TxContext) : Product {
+    // Function to create a new product NFT
+    public fun new_product(name: String, description: String, price: u64, stock: u64, category: String, ctx: &mut TxContext) : Product {
         let id_ = object::new(ctx);
 
-        let picture = Product {
+        let product = Product {
             id: id_,
             name,
             description,
@@ -72,13 +72,13 @@ module ArtCraft::game {
             category,
             artist: sender(ctx),
         };
-        picture 
+        product 
     }
 
     // =================== Helper Functions ===================
 
     // return the publisher
-    fun get_publisher(shared: &PicturePublisher) : &Publisher {
+    fun get_publisher(shared: &ProductPublisher) : &Publisher {
         &shared.publisher
      }
 
