@@ -1,131 +1,178 @@
 #[test_only]
-module art_craft_marketplace::test_marketplace {
+module ArtCraft::test_product {
     use sui::test_scenario::{Self as ts, next_tx, Scenario};
     use sui::transfer;
     use sui::test_utils::{assert_eq};
-    use sui::coin::{mint_for_testing};
-    use sui::object::{Self, UID};
+    use sui::kiosk::{Self, Kiosk, KioskOwnerCap};
+    use sui::transfer_policy::{Self as tp, TransferPolicy, TransferPolicyCap};
+    use sui::object;
     use sui::sui::SUI;
-    use sui::vector::{Self};
+    use sui::coin::{mint_for_testing};
+    use sui::coin::{Self, Coin}; 
     use std::string::{Self};
-    use std::option::{Self, Option};
-    
-    use art_craft_marketplace::marketplace::{Self, Product, User, Transaction, AdminCap};
+    use std::vector;
+     use std::option::{Self, Option};
+    // use std::debug;
 
+    use ArtCraft::game::{Self as art, Product, ProductPublisher};
+    use ArtCraft::floor_price_rule::{Self};
+    use ArtCraft::royalty_rule::{Self};
+    use ArtCraft::helpers::{init_test_helper};
+
+    const ADMIN: address = @0xA;
     const TEST_ADDRESS1: address = @0xB;
     const TEST_ADDRESS2: address = @0xC;
 
-    #[test]
-    public fun test_init_and_create_admin() {
-        let scenario = ts::new();
-        next_tx(scenario, TEST_ADDRESS1);
-
-        // Initialize the marketplace
-        marketplace::init(ts::ctx(scenario));
-
-        // Check if AdminCap is created and transferred to TEST_ADDRESS1
-        let admin_cap = ts::take_from_sender<AdminCap>(scenario);
-        assert_eq(admin_cap.id != object::UID_NULL, true);
-        
-        ts::return_to_sender(scenario, admin_cap);
-        ts::end(scenario);
-    }
 
     #[test]
-    public fun test_create_user() {
-        let scenario = ts::new();
+    public fun test_create_kiosk() {
+        let scenario_test = init_test_helper();
+        let scenario = &mut scenario_test;
+        // Create an kiosk for marketplace
         next_tx(scenario, TEST_ADDRESS1);
-
-        // Create a new user account
-        let user = marketplace::new_user(
-            string::utf8(b"John Doe"),
-            string::utf8(b"john@example.com"),
-            string::utf8(b"Artist"),
-            ts::ctx(scenario)
-        );
-
-        // Verify user details
-        assert_eq(user.name, string::utf8(b"John Doe"));
-        assert_eq(user.email, string::utf8(b"john@example.com"));
-        assert_eq(user.role, string::utf8(b"Artist"));
-
-        ts::return_to_sender(scenario, user);
-        ts::end(scenario);
-    }
-
-    #[test]
-    public fun test_create_product() {
-        let scenario = ts::new();
-        next_tx(scenario, TEST_ADDRESS1);
-
-        // Create a new product
-        let product = marketplace::new_product(
-            string::utf8(b"Handmade Vase"),
-            string::utf8(b"A beautiful handmade vase."),
-            1000,
-            10,
-            string::utf8(b"Craft"),
-            string::utf8(b"John Doe"),
-            ts::ctx(scenario)
-        );
-
-        // Verify product details
-        assert_eq(product.name, string::utf8(b"Handmade Vase"));
-        assert_eq(product.description, string::utf8(b"A beautiful handmade vase."));
-        assert_eq(product.price, 1000);
-        assert_eq(product.stock, 10);
-        assert_eq(product.category, string::utf8(b"Craft"));
-        assert_eq(product.artist, string::utf8(b"John Doe"));
-
-        ts::return_to_sender(scenario, product);
-        ts::end(scenario);
-    }
-
-    #[test]
-    public fun test_transaction_and_purchase() {
-        let scenario = ts::new();
-        next_tx(scenario, TEST_ADDRESS1);
-
-        // Create a new product
-        let product = marketplace::new_product(
-            string::utf8(b"Handmade Vase"),
-            string::utf8(b"A beautiful handmade vase."),
-            1000,
-            10,
-            string::utf8(b"Craft"),
-            string::utf8(b"John Doe"),
-            ts::ctx(scenario)
-        );
-
-        // Transfer product to the test address
-        transfer::public_transfer(product, TEST_ADDRESS1);
-
-        // Create a user account
-        let buyer = marketplace::new_user(
-            string::utf8(b"Jane Doe"),
-            string::utf8(b"jane@example.com"),
-            string::utf8(b"Customer"),
-            ts::ctx(scenario)
-        );
-
-        // Mint some test coins to simulate a purchase
-        let coins = mint_for_testing<SUI>(1000_000_000, ts::ctx(scenario));
-
-        // Simulate a transaction
-        next_tx(scenario, TEST_ADDRESS2);
         {
-            let product = ts::take_from_sender<Product>(scenario);
-            let buyer = ts::take_from_sender<User>(scenario);
-
-            let transaction = marketplace::new_transaction(buyer, product, ts::ctx(scenario));
-            assert_eq(transaction.buyer.name, string::utf8(b"Jane Doe"));
-            assert_eq(transaction.product.name, string::utf8(b"Handmade Vase"));
-
-            transfer::public_transfer(transaction, TEST_ADDRESS2);
-
-            ts::return_to_sender(scenario, coins); // Return coins to reset scenario
+           let cap =  art::new(ts::ctx(scenario));
+           transfer::public_transfer(cap, TEST_ADDRESS1);
         };
 
-        ts::end(scenario);
+         // create an policy
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let publisher = ts::take_shared<ProductPublisher>(scenario);
+            art::new_policy(&publisher, ts::ctx(scenario));
+
+            ts::return_shared(publisher);
+        };
+        
+        // add rule
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let policy = ts::take_shared<TransferPolicy<Product>>(scenario);
+            let cap = ts::take_from_sender<TransferPolicyCap<Product>>(scenario);
+            let amount_bp: u16 = 100;
+            let min_amount: u64 = 0;
+
+            royalty_rule::add(&mut policy, &cap, amount_bp, min_amount);
+           
+            ts::return_to_sender(scenario, cap);
+            ts::return_shared(policy);
+        };
+
+        // create an product NFT
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let str1 = string::utf8(b"asd");
+            let str2 = string::utf8(b"asd");
+            let str3 = string::utf8(b"asd");
+            let num1: u64 = 1;
+            let num2: u64 = 2;
+        
+            let product = art::new_product(str1, str2, num1, num2, str3, ts::ctx(scenario));
+
+            transfer::public_transfer(product, TEST_ADDRESS1);
+        };
+
+        let nft_data = next_tx(scenario, TEST_ADDRESS1);
+        
+        // Place the product NFT to kiosk
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let product_ = ts::take_from_sender<Product>(scenario);
+            let kiosk_cap = ts::take_from_sender<KioskOwnerCap>(scenario);
+            let kiosk =  ts::take_shared<Kiosk>(scenario);
+            // get item id from effects
+            let id_ = ts::created(&nft_data);
+            let item_id = vector::borrow(&id_, 0);
+        
+            kiosk::place(&mut kiosk, &kiosk_cap, product_);
+
+            assert_eq(kiosk::item_count(&kiosk), 1);
+
+            assert_eq(kiosk::has_item(&kiosk, *item_id), true);
+            assert_eq(kiosk::is_locked(&kiosk, *item_id), false);
+            assert_eq(kiosk::is_listed(&kiosk, *item_id), false);
+
+            ts::return_shared(kiosk);
+            ts::return_to_sender(scenario, kiosk_cap);
+        };
+
+        // List the product NFT to kiosk
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let kiosk_cap = ts::take_from_sender<KioskOwnerCap>(scenario);
+            let kiosk =  ts::take_shared<Kiosk>(scenario);
+            let price : u64 = 1000_000_000_000;
+            // get item id from effects
+            let id_ = ts::created(&nft_data);
+            let item_id = vector::borrow(&id_, 0);
+        
+            kiosk::list<Product>(&mut kiosk, &kiosk_cap, *item_id, price);
+
+            assert_eq(kiosk::item_count(&kiosk), 1);
+
+            assert_eq(kiosk::has_item(&kiosk, *item_id), true);
+            assert_eq(kiosk::is_locked(&kiosk, *item_id), false);
+            assert_eq(kiosk::is_listed(&kiosk, *item_id), true);
+
+            ts::return_shared(kiosk);
+            ts::return_to_sender(scenario, kiosk_cap);
+        };
+
+        // purchase the item
+        next_tx(scenario, TEST_ADDRESS2);
+        {
+            let kiosk =  ts::take_shared<Kiosk>(scenario);
+            let policy = ts::take_shared<TransferPolicy<Product>>(scenario);
+            let price  = mint_for_testing<SUI>(1000_000_000_000, ts::ctx(scenario));
+            let royalty_price  = mint_for_testing<SUI>(10_000_000_000, ts::ctx(scenario));
+            // get item id from effects
+            let id_ = ts::created(&nft_data);
+            let item_id = vector::borrow(&id_, 0);
+        
+            let (item, request) = kiosk::purchase<Product>(&mut kiosk, *item_id, price);
+
+            royalty_rule::pay(&mut policy, &mut request, royalty_price);
+            // confirm the request. Destroye the hot potato
+            let (item_id, paid, from ) = tp::confirm_request(&policy, request);
+
+            assert_eq(kiosk::item_count(&kiosk), 0);
+            assert_eq(kiosk::has_item(&kiosk, item_id), false);
+
+            transfer::public_transfer(item, TEST_ADDRESS2);
+         
+            ts::return_shared(kiosk);
+            ts::return_shared(policy);
+        };
+        // withdraw royalty amount from TP
+       next_tx(scenario, TEST_ADDRESS1);
+        {
+            let cap = ts::take_from_sender<TransferPolicyCap<Product>>(scenario);
+            let policy = ts::take_shared<TransferPolicy<Product>>(scenario);
+            let amount = option::none();
+            option::fill(&mut amount, 10_000_000_000);
+
+            let coin_ = tp::withdraw(&mut policy, &cap, amount, ts::ctx(scenario));
+
+            transfer::public_transfer(coin_, TEST_ADDRESS1);
+        
+            ts::return_to_sender(scenario, cap);
+            ts::return_shared(policy);
+        };   
+        // withdraw from kiosk 
+        next_tx(scenario, TEST_ADDRESS1);
+        {
+            let kiosk =  ts::take_shared<Kiosk>(scenario);
+            let cap = ts::take_from_sender<KioskOwnerCap>(scenario);
+            let amount = option::none();
+            option::fill(&mut amount, 1000_000_000_000);
+
+            let coin_ = kiosk::withdraw(&mut kiosk, &cap, amount, ts::ctx(scenario));
+
+            transfer::public_transfer(coin_, TEST_ADDRESS1);
+
+            ts::return_shared(kiosk);
+            ts::return_to_sender(scenario, cap);
+        };        
+        ts::end(scenario_test);
     }
 }

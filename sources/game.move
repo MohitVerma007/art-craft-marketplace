@@ -1,153 +1,90 @@
-module art_craft_marketplace::marketplace {
-    use sui::object::{Self, UID};
-    use sui::tx_context::{Self, TxContext};
-    use sui::package::{Self, Publisher};
-    use sui::transfer;
+module ArtCraft::game {
     use std::string::{String};
+    use sui::object::{Self, UID};
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext, sender};
+    use sui::kiosk::{Self, KioskOwnerCap};
+    use sui::transfer_policy::{Self as tp};
+    use sui::package::{Self, Publisher};
 
-    // Represents a product in the marketplace
-    struct Product has key {
+    // product struct representing an NFT
+    struct Product has key, store {
         id: UID,
         name: String,
         description: String,
         price: u64,
         stock: u64,
         category: String,  // Category such as "Art", "Craft", etc.
-        artist: String,    // Artist or Craftsperson name
+        artist: address,    // Artist or Craftsperson name
     }
+    
+    /// Publisher capability object
+    struct ProductPublisher has key { id: UID, publisher: Publisher }
 
-    // Represents a user in the marketplace
-    struct User has key {
-        id: UID,
-        name: String,
-        email: String,
-        role: String,  // "Artist" or "Customer"
-    }
+     // one time witness 
+    struct GAME has drop {}
 
-    // Represents an admin capability
+    // Only owner of this module can access it.
     struct AdminCap has key {
         id: UID,
     }
 
-    // Represents a transaction in the marketplace
-    struct Transaction has key {
-        id: UID,
-        buyer: User,
-        product: Product,
-        timestamp: u64,
-    }
-
-    // =================== Initialization ===================
-
-    // Initialize the module, create AdminCap
-    public fun init(ctx: &mut TxContext) {
-        let admin_cap = AdminCap { id: object::new(ctx) };
-        transfer::transfer(admin_cap, tx_context::sender(ctx));
-    }
-
-    // =================== Product Operations ===================
-
-    // Create a new product
-    public fun new_product(
-        name: String,
-        description: String,
-        price: u64,
-        stock: u64,
-        category: String,
-        artist: String,
-        ctx: &mut TxContext
-    ): Product {
-        Product {
+    // =================== Initializer ===================
+    fun init(otw: GAME, ctx: &mut TxContext) {
+        // define the publisher
+        let publisher_ = package::claim<GAME>(otw, ctx);
+        // wrap the publisher and share.
+        transfer::share_object(ProductPublisher {
             id: object::new(ctx),
+            publisher: publisher_
+        });
+        // transfer the admincap
+        transfer::transfer(AdminCap{id: object::new(ctx)}, tx_context::sender(ctx));
+    }
+
+    /// Users can create new kiosk for marketplace 
+    public fun new(ctx: &mut TxContext) : KioskOwnerCap {
+        let(kiosk, kiosk_cap) = kiosk::new(ctx);
+        // share the kiosk
+        transfer::public_share_object(kiosk);
+        kiosk_cap
+    }
+    // create any transferpolicy for rules 
+    public fun new_policy(publish: &ProductPublisher, ctx: &mut TxContext ) {
+        // set the publisher
+        let publisher = get_publisher(publish);
+        // create an transfer_policy and tp_cap
+        let (transfer_policy, tp_cap) = tp::new<Product>(publisher, ctx);
+        // transfer the objects 
+        transfer::public_transfer(tp_cap, tx_context::sender(ctx));
+        transfer::public_share_object(transfer_policy);
+    }
+    // Function to create a new product NFT
+    public fun new_product(name: String, description: String, price: u64, stock: u64, category: String, ctx: &mut TxContext) : Product {
+        let id_ = object::new(ctx);
+
+        let product = Product {
+            id: id_,
             name,
             description,
             price,
             stock,
             category,
-            artist,
-        }
+            artist: sender(ctx),
+        };
+        product 
     }
 
-    // Get product details
-    public fun get_product(product: &Product): &Product {
-        product
-    }
+    // =================== Helper Functions ===================
 
-    // Update product details
-    public fun update_product_name(product: &mut Product, new_name: String) {
-        product.name = new_name;
-    }
+    // return the publisher
+    fun get_publisher(shared: &ProductPublisher) : &Publisher {
+        &shared.publisher
+     }
 
-    public fun update_product_price(product: &mut Product, new_price: u64) {
-        product.price = new_price;
-    }
-
-    public fun update_product_stock(product: &mut Product, new_stock: u64) {
-        product.stock = new_stock;
-    }
-
-    public fun update_product_description(product: &mut Product, new_description: String) {
-        product.description = new_description;
-    }
-
-    // Delete a product
-    public fun delete_product(product: Product) {
-        object::delete(product.id);
-    }
-
-    // =================== User Operations ===================
-
-    // Create a new user
-    public fun new_user(name: String, email: String, role: String, ctx: &mut TxContext): User {
-        User {
-            id: object::new(ctx),
-            name,
-            email,
-            role,
-        }
-    }
-
-    // Get user details
-    public fun get_user(user: &User): &User {
-        user
-    }
-
-    // Update user details
-    public fun update_user_name(user: &mut User, new_name: String) {
-        user.name = new_name;
-    }
-
-    public fun update_user_email(user: &mut User, new_email: String) {
-        user.email = new_email;
-    }
-
-    public fun update_user_role(user: &mut User, new_role: String) {
-        user.role = new_role;
-    }
-
-    // Delete a user
-    public fun delete_user(user: User) {
-        object::delete(user.id);
-    }
-
-    // =================== Transaction Operations ===================
-
-    // Create a new transaction
-    public fun new_transaction(
-        buyer: User,
-        product: Product,
-        ctx: &mut TxContext
-    ): Transaction {
-        Transaction {
-            id: object::new(ctx),
-            buyer,
-            product,
-            timestamp: ctx.timestamp(),
-        }
-    }
-
-    // Get transaction details
-    public fun get_transaction(transaction: &Transaction): &Transaction {
-        transaction
+    #[test_only]
+    // call the init function
+    public fun test_init(ctx: &mut TxContext) {
+        init(GAME {}, ctx);
     }
 }

@@ -1,9 +1,9 @@
 [package]
-name = "art-craft-marketplace"
+name = "ArtCraft"
 version = "0.0.1"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/devnet" }
 
 [addresses]
-art-craft-marketplace = "0x0"
+ArtCraft = "0x0"
